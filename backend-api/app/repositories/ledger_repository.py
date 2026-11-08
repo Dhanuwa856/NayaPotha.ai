@@ -8,6 +8,7 @@ class LedgerRepository:
         self.ledger = db.ledger_entries
         self.allocations = db.payment_allocations
         self.receipts = db.sync_receipts
+        self.audits = db.audit_events
 
     async def get_entry_by_id(self, shop_id: str, entry_id: str) -> Optional[Dict[str, Any]]:
         return await self.ledger.find_one({"_id": entry_id, "shop_id": shop_id})
@@ -100,3 +101,24 @@ class LedgerRepository:
         items = docs[:limit]
         next_cursor = items[-1]["_id"] if has_more and items else None
         return items, next_cursor, has_more
+    
+    async def mark_entry_reversed(self, shop_id: str, entry_id: str):
+        await self.ledger.update_one(
+            {"_id": entry_id, "shop_id": shop_id},
+            {"$set": {"status": "REVERSED"}},
+        )
+
+    async def delete_allocations_for_payment(self, shop_id: str, payment_entry_id: str):
+        await self.allocations.delete_many({
+            "shop_id": shop_id,
+            "payment_entry_id": payment_entry_id,
+        })
+
+    async def find_reversal_of(self, shop_id: str, original_entry_id: str) -> Optional[Dict[str, Any]]:
+        return await self.ledger.find_one({
+            "shop_id": shop_id,
+            "reversal_of": original_entry_id,
+        })
+
+    async def log_audit(self, audit_doc: Dict[str, Any]):
+        await self.audits.insert_one(audit_doc)

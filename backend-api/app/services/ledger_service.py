@@ -13,6 +13,9 @@ from app.schemas.ledger import (
     PaymentAllocationResponse,
     LedgerOperationResult,
     LedgerEntryListResponse,
+    ReverseEntryRequest,
+    CorrectEntryRequest,
+    CorrectionOperationResult
 )
 from app.schemas.customer import CustomerBalanceSummary
 
@@ -64,6 +67,244 @@ class LedgerService:
     def __init__(self, ledger_repo: LedgerRepository, customer_repo: CustomerRepository):
         self.ledger_repo = ledger_repo
         self.customer_repo = customer_repo
+        
+        
+    async def reverse_entry(
+        self, shop_id: str, owner_id: str, entry_id: str, data: ReverseEntryRequest
+    ) -> LedgerOperationResult:
+        payload_hash = compute_payload_hash({
+            "action": "REVERSE",
+            "entry_id": entry_id,
+            "reason": data.reason.strip(),
+        })
+
+        # 1. Check Idempotency
+        replay = await self._check_idempotency(shop_id, data.device_id, data.operation_id, payload_hash)
+        if replay:
+            return replay
+
+        # 2. Fetch and validate original entry (Section 6.4 & 8.2)
+        original = await self.ledger_repo.get_entry_by_id(shop_id, entry_id)
+        if not original:
+            raise AppError("LEDGER_ENTRY_NOT_FOUND", "Original ledger entry not found.", 404)
+
+        if original.get("type") == "REVERSAL":
+            raise AppError("CANNOT_REVERSE_REVERSAL", "A reversal entry cannot be reversed.", 422)
+
+        if original.get("status") == "REVERSED":
+            raise AppError("ENTRY_ALREADY_REVERSED", "This ledger entry has already been reversed.", 409)
+
+        existing_rev = await self.ledger_repo.find_reversal_of(shop_id, entry_id)
+        if existing_rev:
+            raise AppError("ENTRY_ALREADY_REVERSED", "This ledger entry has already been reversed.", 409)
+
+        # 3. Handle allocations based on original entry type
+        if original["type"] == "CREDIT_SALE":
+            allocated_amt = await self.ledger_repo.get_allocated_sum_for_credit(shop_id, entry_id)
+            if allocated_amt > 0:
+                raise AppError(
+                    code="CREDIT_HAS_ALLOCATIONS",
+                    message="Cannot reverse a credit sale that already has payments allocated to it. Reverse the payment first.",
+                    status_code=409,
+                    details={"allocated_amount_minor": allocated_amt},
+                )
+        elif original["type"] == "PAYMENT":
+            # Void allocations created by this payment so the credit entries become unpaid again
+            await self.ledger_repo.delete_allocations_for_payment(shop_id, entry_id)
+
+        now = datetime.now(timezone.utc)
+        reversal_id = str(uuid.uuid4())
+
+        # 4. Create immutable compensating REVERSAL entry
+        reversal_doc = {
+            "_id": reversal_id,
+            "shop_id": shop_id,
+            "customer_id": original["customer_id"],
+            "type": "REVERSAL",
+            "amount_minor": original["amount_minor"],
+            "note": f"Reversal: {data.reason.strip()}",
+            "due_date": None,
+            "occurred_at": data.occurred_at,
+            "recorded_at": now,
+            "created_by": owner_id,
+            "operation_id": data.operation_id,
+            "reversal_of": entry_id,
+            "correction_of": None,
+            "status": "POSTED",
+        }
+
+        await self.ledger_repo.create_entry(reversal_doc)
+        await self.ledger_repo.mark_entry_reversed(shop_id, entry_id)
+
+        # 5. Record mandatory Audit Event (Section 6.4)
+        await self.ledger_repo.log_audit({
+            "_id": str(uuid.uuid4()),
+            "shop_id": shop_id,
+            "actor_owner_id": owner_id,
+            "action": "LEDGER_ENTRY_REVERSED",
+            "entity_type": "ledger_entry",
+            "entity_id": entry_id,
+            "reason": data.reason.strip(),
+            "metadata": {
+                "reversal_entry_id": reversal_id,
+                "original_type": original["type"],
+                "amount_minor": original["amount_minor"],
+            },
+            "occurred_at": now,
+        })
+
+        customer = await self.customer_repo.get_by_id(shop_id, original["customer_id"])
+        summary_dict = await self.customer_repo.calculate_balance_summary(
+            shop_id, original["customer_id"], customer.get("credit_limit_minor") if customer else None
+        )
+
+        result = LedgerOperationResult(
+            entry=await self._to_entry_response(reversal_doc),
+            allocations=[],
+            balance_summary=CustomerBalanceSummary(**summary_dict),
+            idempotent_replay=False,
+        )
+
+        await self._save_idempotency_receipt(
+            shop_id=shop_id,
+            device_id=data.device_id,
+            operation_id=data.operation_id,
+            payload_hash=payload_hash,
+            entity_id=reversal_id,
+            result=result,
+            now=now,
+        )
+        return result
+
+    async def correct_entry(
+        self, shop_id: str, owner_id: str, entry_id: str, data: CorrectEntryRequest
+    ) -> CorrectionOperationResult:
+        """
+        Reverses the original entry and posts a new replacement entry linked via `correction_of` (Section 3.6 & 6.4).
+        """
+        original = await self.ledger_repo.get_entry_by_id(shop_id, entry_id)
+        if not original:
+            raise AppError("LEDGER_ENTRY_NOT_FOUND", "Original ledger entry not found.", 404)
+
+        if original.get("type") not in ("CREDIT_SALE", "PAYMENT"):
+            raise AppError("INVALID_CORRECTION_TARGET", "Only CREDIT_SALE or PAYMENT entries can be corrected.", 422)
+
+        # Step 1: Reverse the old entry using a derived deterministic operation_id
+        rev_op_id = f"{data.operation_id}_rev"
+        rev_req = ReverseEntryRequest(
+            operation_id=rev_op_id,
+            reason=f"Correction: {data.reason.strip()}",
+            occurred_at=data.occurred_at,
+            device_id=data.device_id,
+        )
+        rev_result = await self.reverse_entry(shop_id, owner_id, entry_id, rev_req)
+
+        # Step 2: Create the replacement entry
+        now = datetime.now(timezone.utc)
+        replacement_id = str(uuid.uuid4())
+        draft = data.replacement_entry
+        alloc_resps: List[PaymentAllocationResponse] = []
+
+        if original["type"] == "CREDIT_SALE":
+            rep_doc = {
+                "_id": replacement_id,
+                "shop_id": shop_id,
+                "customer_id": original["customer_id"],
+                "type": "CREDIT_SALE",
+                "amount_minor": draft.amount_minor,
+                "note": draft.note.strip() if draft.note else original.get("note"),
+                "due_date": draft.due_date if draft.due_date is not None else original.get("due_date"),
+                "occurred_at": data.occurred_at,
+                "recorded_at": now,
+                "created_by": owner_id,
+                "operation_id": f"{data.operation_id}_rep",
+                "reversal_of": None,
+                "correction_of": entry_id,
+                "status": "POSTED",
+            }
+            await self.ledger_repo.create_entry(rep_doc)
+        else:
+            # PAYMENT replacement -> re-run FIFO allocation against current eligible credits
+            posted_credits = await self.ledger_repo.get_posted_credits_fifo(shop_id, original["customer_id"])
+            eligible_credits = []
+            for c in posted_credits:
+                allocated_so_far = await self.ledger_repo.get_allocated_sum_for_credit(shop_id, c["_id"])
+                rem = c["amount_minor"] - allocated_so_far
+                if rem > 0:
+                    eligible_credits.append({"credit_entry_id": c["_id"], "remaining_minor": rem})
+
+            fifo_pairs = allocate_fifo_pure(draft.amount_minor, eligible_credits)
+            rep_doc = {
+                "_id": replacement_id,
+                "shop_id": shop_id,
+                "customer_id": original["customer_id"],
+                "type": "PAYMENT",
+                "amount_minor": draft.amount_minor,
+                "note": draft.note.strip() if draft.note else original.get("note"),
+                "due_date": None,
+                "occurred_at": data.occurred_at,
+                "recorded_at": now,
+                "created_by": owner_id,
+                "operation_id": f"{data.operation_id}_rep",
+                "reversal_of": None,
+                "correction_of": entry_id,
+                "status": "POSTED",
+            }
+            allocation_docs = [
+                {
+                    "_id": str(uuid.uuid4()),
+                    "shop_id": shop_id,
+                    "payment_entry_id": replacement_id,
+                    "credit_entry_id": cid,
+                    "amount_minor": amt,
+                    "allocated_at": now,
+                }
+                for cid, amt in fifo_pairs
+            ]
+            await self.ledger_repo.create_entry(rep_doc)
+            await self.ledger_repo.create_allocations(allocation_docs)
+            alloc_resps = [
+                PaymentAllocationResponse(
+                    allocation_id=a["_id"],
+                    shop_id=a["shop_id"],
+                    payment_entry_id=a["payment_entry_id"],
+                    credit_entry_id=a["credit_entry_id"],
+                    amount_minor=a["amount_minor"],
+                    allocated_at=a["allocated_at"],
+                )
+                for a in allocation_docs
+            ]
+
+        await self.ledger_repo.log_audit({
+            "_id": str(uuid.uuid4()),
+            "shop_id": shop_id,
+            "actor_owner_id": owner_id,
+            "action": "LEDGER_ENTRY_CORRECTED",
+            "entity_type": "ledger_entry",
+            "entity_id": entry_id,
+            "reason": data.reason.strip(),
+            "metadata": {
+                "reversal_entry_id": rev_result.entry.entry_id,
+                "replacement_entry_id": replacement_id,
+                "old_amount_minor": original["amount_minor"],
+                "new_amount_minor": draft.amount_minor,
+            },
+            "occurred_at": now,
+        })
+
+        customer = await self.customer_repo.get_by_id(shop_id, original["customer_id"])
+        summary_dict = await self.customer_repo.calculate_balance_summary(
+            shop_id, original["customer_id"], customer.get("credit_limit_minor") if customer else None
+        )
+
+        return CorrectionOperationResult(
+            reversed_entry_id=entry_id,
+            reversal_entry=rev_result.entry,
+            replacement_entry=await self._to_entry_response(rep_doc),
+            allocations=alloc_resps,
+            balance_summary=CustomerBalanceSummary(**summary_dict),
+            idempotent_replay=False,
+        )    
 
     async def record_credit_sale(
         self, shop_id: str, owner_id: str, data: CreateCreditSaleRequest

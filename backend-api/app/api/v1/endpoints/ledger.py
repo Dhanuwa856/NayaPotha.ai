@@ -13,6 +13,9 @@ from app.schemas.ledger import (
     LedgerEntryResponse,
     LedgerEntryListResponse,
     PaymentAllocationResponse,
+    ReverseEntryRequest,
+    CorrectEntryRequest,
+    CorrectionOperationResult
 )
 
 router = APIRouter(prefix="/ledger", tags=["Core Ledger & Accounting"])
@@ -72,3 +75,21 @@ async def get_entry_allocations(
     service: LedgerService = Depends(get_ledger_service),
 ):
     return await service.get_entry_allocations(ctx["shop_id"], entry_id)
+
+@router.post("/entries/{entry_id}/reverse", response_model=LedgerOperationResult)
+async def reverse_ledger_entry(
+    entry_id: str,
+    payload: ReverseEntryRequest,
+    ctx: dict = Depends(get_current_context),
+    service: LedgerService = Depends(get_ledger_service),
+):
+    return await service.reverse_entry(ctx["shop_id"], ctx["owner_id"], entry_id, payload)
+
+@router.post("/entries/{entry_id}/correct", response_model=CorrectionOperationResult)
+async def correct_ledger_entry(
+    entry_id: str,
+    payload: CorrectEntryRequest,
+    ctx: dict = Depends(get_current_context),
+    service: LedgerService = Depends(get_ledger_service),
+):
+    return await service.correct_entry(ctx["shop_id"], ctx["owner_id"], entry_id, payload)

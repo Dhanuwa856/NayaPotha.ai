@@ -67,3 +67,39 @@ class LedgerEntryListResponse(BaseModel):
     items: List[LedgerEntryResponse]
     next_cursor: Optional[str] = None
     has_more: bool = False
+    
+    
+class ReverseEntryRequest(BaseModel):
+    operation_id: str = Field(..., min_length=4, max_length=128)
+    reason: str = Field(..., min_length=3, max_length=500, description="Mandatory audit reason for reversal")
+    occurred_at: datetime
+    device_id: str = Field("server-default", min_length=4, max_length=128)
+
+class ReplacementEntryDraft(BaseModel):
+    amount_minor: int = Field(..., gt=0, description="Corrected amount in LKR cents")
+    note: Optional[str] = Field(None, max_length=500)
+    due_date: Optional[str] = Field(None, description="YYYY-MM-DD (only for CREDIT_SALE)")
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v.strip() == "":
+            return None
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("due_date must be in YYYY-MM-DD format")
+        return v
+
+class CorrectEntryRequest(BaseModel):
+    operation_id: str = Field(..., min_length=4, max_length=128)
+    reason: str = Field(..., min_length=3, max_length=500, description="Mandatory reason for correction")
+    occurred_at: datetime
+    device_id: str = Field("server-default", min_length=4, max_length=128)
+    replacement_entry: ReplacementEntryDraft
+
+class CorrectionOperationResult(BaseModel):
+    reversed_entry_id: str
+    reversal_entry: LedgerEntryResponse
+    replacement_entry: LedgerEntryResponse
+    allocations: List[PaymentAllocationResponse] = []
+    balance_summary: CustomerBalanceSummary
+    idempotent_replay: bool = False    
