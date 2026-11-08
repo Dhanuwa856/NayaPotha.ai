@@ -1,18 +1,34 @@
 import "../global.css";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from "@expo-google-fonts/poppins";
-import { NotoSansSinhala_400Regular, NotoSansSinhala_700Bold } from "@expo-google-fonts/noto-sans-sinhala";
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from "@expo-google-fonts/inter";
+import {
+  NotoSansSinhala_400Regular,
+  NotoSansSinhala_500Medium,
+  NotoSansSinhala_600SemiBold,
+  NotoSansSinhala_700Bold,
+} from "@expo-google-fonts/noto-sans-sinhala";
 import * as SplashScreen from "expo-splash-screen";
+import { LanguageProvider } from "../context/LanguageContext";
+import { AuthProvider } from "../context/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    Poppins_400Regular,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
     NotoSansSinhala_400Regular,
+    NotoSansSinhala_500Medium,
+    NotoSansSinhala_600SemiBold,
     NotoSansSinhala_700Bold,
   });
 
@@ -22,14 +38,20 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  if (!loaded && !error) {
-    return null;
-  }
+  if (!loaded && !error) return null;
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="login" />
-    </Stack>
+    <LanguageProvider>
+      <AuthProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="language" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="home" />
+        </Stack>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }
