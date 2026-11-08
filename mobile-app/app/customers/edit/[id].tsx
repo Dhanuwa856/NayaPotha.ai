@@ -4,12 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Calendar, Info, AlertCircle } from "lucide-react-native";
 import { useLanguage } from "../../../context/LanguageContext";
@@ -27,6 +28,8 @@ export default function EditCustomerScreen() {
   const { id, code } = useLocalSearchParams<{ id: string; code?: string }>();
   const { t } = useLanguage();
   const { shop } = useAuth();
+  const insets = useSafeAreaInsets();
+  
 
   const [customer, setCustomer] = useState<CustomerItem | null>(null);
   const [name, setName] = useState("");
@@ -147,7 +150,7 @@ export default function EditCustomerScreen() {
 
         <ScrollView
           className="flex-1 px-5 py-4"
-          contentContainerStyle={{ paddingBottom: 110 }}
+          contentContainerStyle={{ paddingBottom: 24 }}
         >
           {errorMsg && (
             <View className="p-3.5 mb-4 bg-rose-50 rounded-xl border border-brand-error flex-row items-center gap-2.5">
@@ -256,7 +259,9 @@ export default function EditCustomerScreen() {
         </ScrollView>
 
         {/* Bottom Cancel / Save Changes */}
-        <View className="px-5 py-3 bg-white border-t border-slate-100 flex-row gap-3">
+        <View className="px-5 py-3 bg-white border-t border-slate-100 flex-row gap-3"
+         style={{ paddingBottom: Math.max(insets.bottom, 10) + 75 }}
+        >
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => router.back()}
@@ -280,8 +285,9 @@ export default function EditCustomerScreen() {
           </TouchableOpacity>
         </View>
 
-        <BottomNav active="Customers" />
       </KeyboardAvoidingView>
+              <BottomNav active="Customers" />
+
     </SafeAreaView>
   );
 }

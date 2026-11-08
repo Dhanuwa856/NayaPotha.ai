@@ -65,6 +65,11 @@ export default function RootLayout() {
 <Stack.Screen name="ledger/entry/[id]" />
 <Stack.Screen name="ledger/reverse/[id]" />
 <Stack.Screen name="customers/due-limit/[id]" />
+<Stack.Screen name="voice/record" />
+<Stack.Screen name="voice/draft" />
+<Stack.Screen name="voice/confirm" />
+<Stack.Screen name="voice/recorded" />
+<Stack.Screen name="customers/risk/[id]" />
 </Stack>
       </AuthProvider>
     </LanguageProvider>
