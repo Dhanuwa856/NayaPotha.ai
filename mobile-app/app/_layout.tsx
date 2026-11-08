@@ -17,6 +17,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import { LanguageProvider } from "../context/LanguageContext";
 import { AuthProvider } from "../context/AuthContext";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,17 +42,24 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <LanguageProvider>
+ <SafeAreaProvider>
+     <LanguageProvider>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="language" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="home" />
-        </Stack>
+       <Stack screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="index" />
+    <Stack.Screen name="language" />
+    <Stack.Screen name="login" />
+  <Stack.Screen name="register" />
+  <Stack.Screen name="forgot-password" />
+  <Stack.Screen name="home" />
+  <Stack.Screen name="notifications" />
+  <Stack.Screen name="customers/index" />
+  <Stack.Screen name="customers/add" />
+  <Stack.Screen name="customers/[id]" />
+  <Stack.Screen name="customers/edit/[id]" />
+</Stack>
       </AuthProvider>
     </LanguageProvider>
+ </SafeAreaProvider>
   );
 }
