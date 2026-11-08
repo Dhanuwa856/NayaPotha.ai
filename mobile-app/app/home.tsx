@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   Bell,
   PlusCircle,
@@ -30,42 +30,40 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const { owner, shop } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
   const [isSyncing, setIsSyncing] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 1. Initial State එක 0 සහ හිස් අගයන් (Empty) ලෙස සැකසීම
+  // Real database states (Initialized to 0 / empty)
   const [totalCustomers, setTotalCustomers] = useState<number>(0);
   const [overdueCount, setOverdueCount] = useState<number>(0);
   const [todaySalesMinor, setTodaySalesMinor] = useState<number>(0);
   const [todayPaymentsMinor, setTodayPaymentsMinor] = useState<number>(0);
   const [totalOutstandingMinor, setTotalOutstandingMinor] = useState<number>(0);
-  const [recentTransactions, setRecentTransactions] = useState<RecentTransactionItem[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<
+    RecentTransactionItem[]
+  >([]);
 
-  // 2. දවසේ වෙලාවට අනුව Greeting එක සෑදීම
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return t.goodMorning;
-    if (hour < 17) return t.goodAfternoon;
-    if (hour < 20) return t.goodEvening;
-    return t.goodNight;
-  };
-
-  // 3. Database එකෙන් Real Data ලබා ගැනීම
+  // Time-based greeting
+ const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return t.goodMorning;
+  if (hour < 17) return t.goodAfternoon;
+  return t.goodEvening;
+};
+  // Load real dashboard metrics from FastAPI
   const loadDashboard = useCallback(async () => {
     try {
       setIsSyncing(true);
       const data = await shopAndCustomerApi.getDashboardData();
-      
-      // Database එකෙන් එන දත්ත කෙලින්ම State එකට දැමීම (0 වුවත් යාවත්කාලීන වේ)
+
       setTotalCustomers(data.totalCustomers);
       setOverdueCount(data.overdueCustomersCount);
       setTodaySalesMinor(data.todaySalesMinor);
       setTodayPaymentsMinor(data.todayPaymentsMinor);
       setTotalOutstandingMinor(data.totalOutstandingMinor);
       setRecentTransactions(data.recentTransactions);
-      
     } catch (error) {
       console.log("Failed to load dashboard data:", error);
     } finally {
@@ -74,9 +72,12 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+  // Automatically refresh dashboard numbers whenever returning to Home screen
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -101,6 +102,7 @@ export default function HomeScreen() {
       {/* Top App Bar */}
       <View className="h-20 px-5 flex-row items-center justify-between border-b border-slate-100">
         <View className="flex-row items-center gap-2.5">
+          {/* IMAGE PLACEHOLDER: Replace with your app logo */}
           <Image
             source={require("../assets/images/logo.png")}
             className="w-12 h-12 rounded-xl"
@@ -111,6 +113,7 @@ export default function HomeScreen() {
         </View>
 
         <View className="flex-row items-center gap-3">
+          {/* Live Sync Status Pill */}
           <View className="px-3 py-1.5 bg-brand-surface rounded-xl border border-brand-border flex-row items-center gap-2">
             <View
               className={`w-2.5 h-2.5 rounded-full ${
@@ -122,14 +125,16 @@ export default function HomeScreen() {
             </Text>
           </View>
 
+          {/* Notification Bell Button */}
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => router.push("/notifications")}
+            onPress={() => router.push("/notifications" as any)}
             className="w-11 h-11 bg-brand-surface rounded-2xl items-center justify-center relative"
           >
             <Bell size={22} color="#102F50" strokeWidth={2.2} />
-            {/* Unread badge dot (Can make dynamic later) */}
-            <View className="w-2.5 h-2.5 bg-brand-orange rounded-full absolute top-2.5 right-2.5 border border-white" />
+            {overdueCount > 0 && (
+              <View className="w-2.5 h-2.5 bg-brand-orange rounded-full absolute top-2.5 right-2.5 border border-white" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -137,12 +142,18 @@ export default function HomeScreen() {
       {/* Main Scrollable Content */}
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 110 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* Dynamic Greeting Header */}
         <View className="px-5 pt-4 pb-4">
-          <Text className="text-brand-navy text-base font-inter-medium">
+          <Text
+            className={`text-brand-navy text-base ${
+              lang === "si" ? "font-sinhala-medium" : "font-inter-medium"
+            }`}
+          >
             {getGreeting()}
             <Text className="text-xl font-inter-bold">
               {owner?.name || "Dhanushka"} !
@@ -154,11 +165,16 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Summary KPI Cards Grid (Real Data) */}
+        {/* Summary KPI Cards Grid */}
         <View className="px-5 gap-3">
+          {/* Row 1: Total Customers & Overdue Customers */}
           <View className="flex-row gap-3">
-            <View className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]">
-              <Text className="text-brand-textSecondary text-sm font-inter-semibold">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push("/customers" as any)}
+              className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]"
+            >
+              <Text className="text-brand-textSecondary text-xs font-inter-semibold">
                 {t.totalCustomers}
               </Text>
               <Text className="text-brand-navy text-3xl font-inter-bold my-1">
@@ -167,24 +183,33 @@ export default function HomeScreen() {
               <Text className="text-brand-textSecondary text-xs font-inter">
                 {t.activeAccounts}
               </Text>
-            </View>
+            </TouchableOpacity>
 
-            <View className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]">
-              <Text className="text-brand-textSecondary text-sm font-inter-semibold">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push("/customers" as any)}
+              className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]"
+            >
+              <Text className="text-brand-textSecondary text-xs font-inter-semibold">
                 {t.overdueCustomers}
               </Text>
-              <Text className="text-brand-navy text-3xl font-inter-bold my-1">
+              <Text
+                className={`text-3xl font-inter-bold my-1 ${
+                  overdueCount > 0 ? "text-brand-error" : "text-brand-navy"
+                }`}
+              >
                 {overdueCount}
               </Text>
               <Text className="text-brand-textSecondary text-xs font-inter">
                 {t.needsAttention}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
+          {/* Row 2: Today's Sales & Today's Payments */}
           <View className="flex-row gap-3">
             <View className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]">
-              <Text className="text-brand-textSecondary text-sm font-inter-semibold">
+              <Text className="text-brand-textSecondary text-xs font-inter-semibold">
                 {t.todaysSales}
               </Text>
               <Text className="text-brand-navy text-2xl font-inter-bold my-1">
@@ -196,7 +221,7 @@ export default function HomeScreen() {
             </View>
 
             <View className="flex-1 p-4 bg-brand-surface rounded-2xl justify-between min-h-[104px]">
-              <Text className="text-brand-textSecondary text-sm font-inter-semibold">
+              <Text className="text-brand-textSecondary text-xs font-inter-semibold">
                 {t.todaysPayments}
               </Text>
               <Text className="text-brand-navy text-2xl font-inter-bold my-1">
@@ -208,8 +233,9 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* Row 3: Full-Width Navy Total Outstanding Card */}
           <View className="w-full p-4 bg-brand-navy rounded-2xl justify-between min-h-[104px]">
-            <Text className="text-slate-200 text-sm font-inter-semibold">
+            <Text className="text-slate-200 text-xs font-inter-semibold">
               {t.totalOutstanding}
             </Text>
             <Text className="text-white text-3xl font-inter-bold my-1">
@@ -223,15 +249,21 @@ export default function HomeScreen() {
 
         {/* Quick Actions Section */}
         <View className="px-5 pt-5">
-          <Text className="text-brand-navy text-sm font-inter-semibold mb-2.5">
+          <Text className="text-brand-navy text-xs font-inter-semibold mb-2.5">
             {t.quickActions}
           </Text>
 
+          {/* Row 1: Add Credit & Record Payment (Opens 3-Step Ledger Wizard) */}
           <View className="flex-row gap-3.5 mb-3">
             <TouchableOpacity
               activeOpacity={0.85}
-            //   onPress={() => router.push("/customers")}
-              className="flex-1 h-12 bg-brand-navy rounded-xl flex-row items-center justify-center gap-2"
+              onPress={() =>
+                router.push({
+                  pathname: "/ledger/select-customer",
+                  params: { type: "CREDIT_SALE" },
+                } as any)
+              }
+              className="flex-1 h-12 bg-brand-navy rounded-xl flex-row items-center justify-center gap-2 shadow-sm"
             >
               <PlusCircle size={20} color="#FFFFFF" strokeWidth={2.2} />
               <Text className="text-white text-base font-inter-semibold">
@@ -241,7 +273,12 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-            //   onPress={() => router.push("/customers")}
+              onPress={() =>
+                router.push({
+                  pathname: "/ledger/select-customer",
+                  params: { type: "PAYMENT" },
+                } as any)
+              }
               className="flex-1 h-12 bg-white rounded-xl border border-brand-navy flex-row items-center justify-center gap-2"
             >
               <CheckCircle2 size={20} color="#102F50" strokeWidth={2.2} />
@@ -251,32 +288,35 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Row 2: View Customers & Reports */}
           <View className="flex-row gap-3.5 mb-3">
             <TouchableOpacity
               activeOpacity={0.85}
-            //   onPress={() => router.push("/customers")}
+              onPress={() => router.push("/customers" as any)}
               className="flex-1 h-12 bg-white rounded-xl border border-brand-navy flex-row items-center justify-center gap-2"
             >
               <Users size={19} color="#102F50" strokeWidth={2.2} />
-              <Text className="text-brand-navy text-base font-inter-semibold">
+              <Text className="text-brand-navy text-sm font-inter-semibold">
                 {t.viewCustomers}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               activeOpacity={0.85}
-            //   onPress={() => router.push("/reports")}
+              onPress={() => router.push("/reports" as any)}
               className="flex-1 h-12 bg-white rounded-xl border border-brand-navy flex-row items-center justify-center gap-2"
             >
               <FileText size={19} color="#102F50" strokeWidth={2.2} />
-              <Text className="text-brand-navy text-base font-inter-semibold">
+              <Text className="text-brand-navy text-sm font-inter-semibold">
                 {t.reports}
               </Text>
             </TouchableOpacity>
           </View>
 
+          {/* Row 3: Voice Entry */}
           <TouchableOpacity
             activeOpacity={0.85}
+            onPress={() => router.push("/ledger/new" as any)}
             className="w-full h-12 bg-white rounded-xl border border-brand-navy flex-row items-center justify-center gap-2"
           >
             <Mic size={20} color="#102F50" strokeWidth={2.2} />
@@ -289,32 +329,47 @@ export default function HomeScreen() {
         {/* Recent Transactions Section */}
         <View className="px-5 pt-6">
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-brand-navy text-lg font-inter-bold">
+            <Text className="text-brand-navy text-base font-inter-bold">
               {t.recentTransactions}
             </Text>
           </View>
 
           <View className="gap-2.5">
             {recentTransactions.length === 0 ? (
-              <Text className="text-brand-textSecondary font-inter text-sm mt-2 text-center">
-                {t.noTransactions}
-              </Text>
+              <View className="py-6 px-4 bg-brand-surface rounded-xl items-center">
+                <Text className="text-brand-textSecondary font-inter text-sm text-center">
+                  {t.noTransactions}
+                </Text>
+              </View>
             ) : (
               recentTransactions.map((tx) => {
                 const isPayment = tx.type === "PAYMENT";
+                const isReversal = tx.type === "REVERSAL";
                 return (
-                  <View
+                  <TouchableOpacity
                     key={tx.entry_id}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/ledger/entry/[id]",
+                        params: {
+                          id: tx.entry_id,
+                          customer_id: tx.customer_id,
+                          customer_name: tx.customer_name,
+                          code: tx.customer_code,
+                        },
+                      } as any)
+                    }
                     className="p-3.5 bg-brand-surface rounded-xl flex-row items-center gap-3"
                   >
-                    <View className="w-11 h-11 bg-white rounded-2xl border border-brand-border items-center justify-center">
-                      <Text className="text-brand-navy text-sm font-inter-bold">
+                    <View className="w-10 h-10 bg-white rounded-2xl border border-brand-border items-center justify-center">
+                      <Text className="text-brand-navy text-xs font-inter-bold">
                         {getInitials(tx.customer_name)}
                       </Text>
                     </View>
 
                     <View className="flex-1">
-                      <Text className="text-brand-navy text-base font-inter-semibold">
+                      <Text className="text-brand-navy text-sm font-inter-semibold">
                         {tx.customer_name}
                       </Text>
                       <Text className="text-brand-textSecondary text-xs font-inter mt-0.5">
@@ -324,17 +379,25 @@ export default function HomeScreen() {
 
                     <View className="items-end">
                       <Text
-                        className={`text-base font-inter-bold ${
-                          isPayment ? "text-brand-success" : "text-brand-navy"
+                        className={`text-sm font-inter-bold ${
+                          isPayment
+                            ? "text-brand-success"
+                            : isReversal
+                            ? "text-brand-error"
+                            : "text-brand-navy"
                         }`}
                       >
                         {formatLKR(tx.amount_minor)}
                       </Text>
                       <Text className="text-brand-textSecondary text-xs font-inter mt-0.5">
-                        {isPayment ? t.paymentLabel : t.creditLabel}
+                        {isPayment
+                          ? t.paymentLabel
+                          : isReversal
+                          ? "Reversal"
+                          : t.creditLabel}
                       </Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -342,7 +405,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
+      {/* Floating Glass Bottom Navigation Bar */}
       <BottomNav active="Home" />
     </SafeAreaView>
   );

@@ -57,6 +57,14 @@ export default function RootLayout() {
   <Stack.Screen name="customers/add" />
   <Stack.Screen name="customers/[id]" />
   <Stack.Screen name="customers/edit/[id]" />
+  <Stack.Screen name="ledger/new" />
+<Stack.Screen name="ledger/select-customer" />
+<Stack.Screen name="ledger/add-credit" />
+<Stack.Screen name="ledger/record-payment" />
+<Stack.Screen name="ledger/review" />
+<Stack.Screen name="ledger/entry/[id]" />
+<Stack.Screen name="ledger/reverse/[id]" />
+<Stack.Screen name="customers/due-limit/[id]" />
 </Stack>
       </AuthProvider>
     </LanguageProvider>
