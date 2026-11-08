@@ -2,28 +2,31 @@
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
-  darkMode: "class", 
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
         brand: {
-          navy: "#0F2942",      // NayaPotha ප්‍රධාන තද නිල් පාට (Buttons & Headers)
-          orange: "#F97316",    // '.ai' සහ ලෝගෝ එකේ තැඹිලි පාට
-          green: "#16A34A",     // ලෝගෝ එකේ කොළ පාට
-          light: "#F8FAFC",     // Card පසුබිම් පාට
-          border: "#CBD5E1",    // Input/Card border පාට
-        },
-        risk: {
-          low: "#22C55E",       // Low Risk 🟢
-          medium: "#EAB308",    // Medium Risk 🟡
-          high: "#EF4444",      // High Risk 🔴
+          navy: "#102F50",          // Primary Navy
+          navySecondary: "#12385B", // Secondary Navy
+          orange: "#F59E0B",        // Orange
+          success: "#16A36A",       // Success
+          error: "#DC4545",         // Error
+          info: "#2563EB",          // Info
+          surface: "#F1F5F9",       // Secondary Surface
+          border: "#E2E8F0",        // Border
+          text: "#102F50",          // Main Text
+          textSecondary: "#64748B", // Secondary Text
         }
       },
       fontFamily: {
-        poppins: ["Poppins_400Regular"],
-        "poppins-semibold": ["Poppins_600SemiBold"],
-        "poppins-bold": ["Poppins_700Bold"],
+        inter: ["Inter_400Regular"],
+        "inter-medium": ["Inter_500Medium"],
+        "inter-semibold": ["Inter_600SemiBold"],
+        "inter-bold": ["Inter_700Bold"],
         sinhala: ["NotoSansSinhala_400Regular"],
+        "sinhala-medium": ["NotoSansSinhala_500Medium"],
+        "sinhala-semibold": ["NotoSansSinhala_600SemiBold"],
         "sinhala-bold": ["NotoSansSinhala_700Bold"],
       },
     },
