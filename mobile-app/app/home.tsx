@@ -316,7 +316,7 @@ export default function HomeScreen() {
           {/* Row 3: Voice Entry */}
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => router.push("/ledger/new" as any)}
+            onPress={() => router.push("/voice/record" as any)}
             className="w-full h-12 bg-white rounded-xl border border-brand-navy flex-row items-center justify-center gap-2"
           >
             <Mic size={20} color="#102F50" strokeWidth={2.2} />

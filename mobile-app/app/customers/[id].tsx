@@ -225,12 +225,12 @@ export default function CustomerDetailScreen() {
         {/* View History Row */}
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() =>
-            router.push({
-              pathname: "/ledger/history",
-              params: { customer_id: customer.customer_id, name: displayTitle },
-            } as any)
-          }
+         onPress={() =>
+  router.push({
+    pathname: "/reports/statement",
+    params: { customer_id: customer.customer_id, code: displayCode },
+  } as any)
+}
           className="px-4 py-3.5 bg-white rounded-xl border border-brand-border flex-row items-center justify-between mb-4"
         >
           <View className="flex-1 pr-3">

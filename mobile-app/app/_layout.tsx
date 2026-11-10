@@ -70,6 +70,11 @@ export default function RootLayout() {
 <Stack.Screen name="voice/confirm" />
 <Stack.Screen name="voice/recorded" />
 <Stack.Screen name="customers/risk/[id]" />
+<Stack.Screen name="reports/index" />
+<Stack.Screen name="reports/daily-summary" />
+<Stack.Screen name="reports/overdue" />
+<Stack.Screen name="reports/statement" />
+<Stack.Screen name="reports/pdf-preview" />
 </Stack>
       </AuthProvider>
     </LanguageProvider>
