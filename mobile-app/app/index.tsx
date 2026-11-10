@@ -13,7 +13,7 @@ export default function LoadingScreen() {
     if (isLoadingLang || isLoadingAuth) return;
 
     const timer = setTimeout(() => {
-      if (!hasSelectedLanguage) {
+      if (hasSelectedLanguage) {
         router.replace("/language");
       } else if (owner) {
         router.replace("/home");
@@ -41,7 +41,7 @@ export default function LoadingScreen() {
         <Text className="text-3xl text-center font-inter-bold text-brand-navy mb-4 leading-10">
           {t.heroTitle}
         </Text>
-        <Text className="text-base text-center font-inter text-brand-textSecondary leading-6 px-2">
+        <Text className="text-sm text-center font-inter text-brand-textSecondary leading-6 px-2">
           {t.heroSubtitle}
         </Text>
       </View>

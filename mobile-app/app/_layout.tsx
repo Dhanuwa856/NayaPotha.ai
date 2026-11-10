@@ -17,6 +17,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import { LanguageProvider } from "../context/LanguageContext";
 import { AuthProvider } from "../context/AuthContext";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,17 +42,42 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <LanguageProvider>
+ <SafeAreaProvider>
+     <LanguageProvider>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="language" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="home" />
-        </Stack>
+       <Stack screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="index" />
+    <Stack.Screen name="language" />
+    <Stack.Screen name="login" />
+  <Stack.Screen name="register" />
+  <Stack.Screen name="forgot-password" />
+  <Stack.Screen name="home" />
+  <Stack.Screen name="notifications" />
+  <Stack.Screen name="customers/index" />
+  <Stack.Screen name="customers/add" />
+  <Stack.Screen name="customers/[id]" />
+  <Stack.Screen name="customers/edit/[id]" />
+  <Stack.Screen name="ledger/new" />
+<Stack.Screen name="ledger/select-customer" />
+<Stack.Screen name="ledger/add-credit" />
+<Stack.Screen name="ledger/record-payment" />
+<Stack.Screen name="ledger/review" />
+<Stack.Screen name="ledger/entry/[id]" />
+<Stack.Screen name="ledger/reverse/[id]" />
+<Stack.Screen name="customers/due-limit/[id]" />
+<Stack.Screen name="voice/record" />
+<Stack.Screen name="voice/draft" />
+<Stack.Screen name="voice/confirm" />
+<Stack.Screen name="voice/recorded" />
+<Stack.Screen name="customers/risk/[id]" />
+<Stack.Screen name="reports/index" />
+<Stack.Screen name="reports/daily-summary" />
+<Stack.Screen name="reports/overdue" />
+<Stack.Screen name="reports/statement" />
+<Stack.Screen name="reports/pdf-preview" />
+</Stack>
       </AuthProvider>
     </LanguageProvider>
+ </SafeAreaProvider>
   );
 }
