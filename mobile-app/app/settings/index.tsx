@@ -213,3 +213,11 @@ export default function SettingsScreen() {
     </SafeAreaView>
   );
 }
+
+
+
+
+
+
+
+
