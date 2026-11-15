@@ -120,8 +120,9 @@ export default function RecordWithVoiceScreen() {
           recordedUri,
           voiceLang
         );
-        if (sttResult && sttResult.trim().length > 0) {
-          finalTranscript = sttResult.trim();
+        const transcript = sttResult?.transcript?.trim();
+        if (transcript) {
+          finalTranscript = transcript;
           setSpokenText(finalTranscript);
         }
       }
