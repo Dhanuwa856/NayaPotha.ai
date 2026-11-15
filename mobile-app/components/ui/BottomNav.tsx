@@ -28,19 +28,18 @@ export default function BottomNav({ active }: BottomNavProps) {
     <View
       style={{
         position: "absolute",
-        // Phone එකේ යටින් තියෙන back බොත්තම් වලට අනුව උස වෙනස් වේ
-        bottom: Math.max(insets.bottom, 20),
-        left: 20,
-        right: 20,
-        ...styles.shadow
+        bottom: Math.max(insets.bottom, 14),
+        left: 16,
+        right: 16,
+        ...styles.shadow,
       }}
     >
       <BlurView
-        intensity={Platform.OS === 'ios' ? 80 : 100}
+        intensity={Platform.OS === "ios" ? 85 : 70}
         tint="light"
-        style={{ borderRadius: 32, overflow: 'hidden' }}
+        style={styles.glassContainer}
       >
-        <View className="flex-row items-center justify-around h-16 px-2 bg-white/80 border border-white/50">
+        <View className="flex-row items-center h-[70px] px-2">
           {tabs.map(({ key, label, route, Icon }) => {
             const isActive = active === key;
             return (
@@ -50,16 +49,13 @@ export default function BottomNav({ active }: BottomNavProps) {
                 onPress={() => {
                   if (!isActive) router.push(route as any);
                 }}
-                className="flex-1 items-center justify-center h-full"
+                className={`flex-1 items-center justify-center h-14 mx-1 rounded-2xl ${
+                  isActive ? "bg-white/80" : "bg-transparent"
+                }`}
+                style={isActive ? styles.activeTab : undefined}
               >
-                {/* Active Indicator Line */}
-                <View
-                  className={`w-6 h-1 rounded-full mb-1 ${
-                    isActive ? "bg-brand-orange" : "bg-transparent"
-                  }`}
-                />
                 <Icon
-                  size={22}
+                  size={isActive ? 22 : 21}
                   color={isActive ? "#102F50" : "#64748B"}
                   strokeWidth={isActive ? 2.4 : 2}
                 />
@@ -81,11 +77,27 @@ export default function BottomNav({ active }: BottomNavProps) {
 
 // වෙනම Shadow එකක් ලබා දීම (BlurView සමග හොඳින් වැඩ කිරීමට)
 const styles = StyleSheet.create({
+  glassContainer: {
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: "rgba(255, 255, 255, 0.62)",
+  },
+  activeTab: {
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+    shadowColor: "#102F50",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   shadow: {
     shadowColor: "#102F50",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 10,
   },
 });

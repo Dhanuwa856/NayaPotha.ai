@@ -21,7 +21,7 @@ import { syncAndSettingsApi } from "../../services/syncAndSettingsService";
 export default function ShopProfileScreen() {
   const router = useRouter();
   const { t } = useLanguage();
-  const { shop, refreshProfile } = useAuth() as any;
+  const { shop, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
 
   const [shopName, setShopName] = useState(shop?.shop_name || "");

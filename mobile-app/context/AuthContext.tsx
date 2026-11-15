@@ -6,6 +6,7 @@ interface AuthContextType {
   owner: any | null;
   shop: any | null;
   isLoadingAuth: boolean;
+  refreshProfile: () => Promise<void>;
   login: (phone: string, password: string) => Promise<void>;
   register: (data: { name: string; phone: string; password: string; shop_name: string; address?: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -22,14 +23,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
+  const refreshProfile = async () => {
+    const res = await api.get("/auth/me");
+    setOwner(res.data.owner);
+    setShop(res.data.shop);
+  };
+
   // Calls GET /api/v1/auth/me on app startup
   const restoreSession = async () => {
     try {
       const token = await SecureStore.getItemAsync("nayapotha_access_token");
       if (!token) return;
-      const res = await api.get("/auth/me");
-      setOwner(res.data.owner);
-      setShop(res.data.shop);
+      await refreshProfile();
     } catch {
       await clearTokens();
     } finally {
@@ -78,7 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ owner, shop, isLoadingAuth, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        owner,
+        shop,
+        isLoadingAuth,
+        refreshProfile,
+        login,
+        register,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
