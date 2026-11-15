@@ -53,15 +53,38 @@ async def get_dashboard_metrics(
         {"shop_id": shop_id, "status": "POSTED"}, {"_id": 0}
     ).to_list(length=None)
 
+    credit_by_customer = {}
+    payment_by_customer = {}
     today_sales_minor = 0
     today_payments_minor = 0
     for e in all_posted_entries:
+        customer_id = e.get("customer_id")
+        amount_minor = e.get("amount_minor", 0)
+        if customer_id:
+            if e.get("type") == "CREDIT_SALE":
+                credit_by_customer[customer_id] = (
+                    credit_by_customer.get(customer_id, 0) + amount_minor
+                )
+            elif e.get("type") == "PAYMENT":
+                payment_by_customer[customer_id] = (
+                    payment_by_customer.get(customer_id, 0) + amount_minor
+                )
+
         occ_str = _to_iso_str(e.get("occurred_at"))
         if occ_str.startswith(today_prefix):
             if e.get("type") == "CREDIT_SALE":
-                today_sales_minor += e.get("amount_minor", 0)
+                today_sales_minor += amount_minor
             elif e.get("type") == "PAYMENT":
-                today_payments_minor += e.get("amount_minor", 0)
+                today_payments_minor += amount_minor
+
+    total_outstanding_minor = sum(
+        max(
+            0,
+            credit_by_customer.get(customer_id, 0)
+            - payment_by_customer.get(customer_id, 0),
+        )
+        for customer_id in set(credit_by_customer) | set(payment_by_customer)
+    )
 
     recent_raw = (
         await db.ledger_entries.find({"shop_id": shop_id}, {"_id": 0})
