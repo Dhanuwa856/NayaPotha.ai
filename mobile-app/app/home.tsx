@@ -342,26 +342,27 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              recentTransactions.map((tx) => {
-                const isPayment = tx.type === "PAYMENT";
-                const isReversal = tx.type === "REVERSAL";
-                return (
-                  <TouchableOpacity
-                    key={tx.entry_id}
-                    activeOpacity={0.85}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/ledger/entry/[id]",
-                        params: {
-                          id: tx.entry_id,
-                          customer_id: tx.customer_id,
-                          customer_name: tx.customer_name,
-                          code: tx.customer_code,
-                        },
-                      } as any)
-                    }
-                    className="p-3.5 bg-brand-surface rounded-xl flex-row items-center gap-3"
-                  >
+              recentTransactions.map((tx, index: number) => {
+              const isPayment = tx.type === "PAYMENT";
+              const isReversal = tx.type === "REVERSAL";
+              return (
+                <TouchableOpacity
+                  // entry_id එක null නම් index එක key එක ලෙස භාවිතා කරයි
+                  key={tx.entry_id || `tx-${index}`} 
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/ledger/entry/[id]",
+                      params: {
+                        id: tx.entry_id,
+                        customer_id: tx.customer_id,
+                        customer_name: tx.customer_name,
+                        code: tx.customer_code,
+                      },
+                    } as any)
+                  }
+                  className="p-3.5 bg-brand-surface rounded-xl flex-row items-center gap-3"
+                >
                     <View className="w-10 h-10 bg-white rounded-2xl border border-brand-border items-center justify-center">
                       <Text className="text-brand-navy text-xs font-inter-bold">
                         {getInitials(tx.customer_name)}

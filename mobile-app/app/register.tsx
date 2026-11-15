@@ -5,7 +5,6 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,6 +14,8 @@ import { useRouter } from "expo-router";
 import { User, Store, Phone, MapPin, Lock, Eye, EyeOff, AlertCircle } from "lucide-react-native";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 
 export default function RegisterScreen() {
   const router = useRouter();
