@@ -3,8 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ⚠️ Replace with your computer's local Wi-Fi IPv4 address
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:8000/api/v1";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://nayapotha-ai-01.onrender.com/docs/api/v1";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
