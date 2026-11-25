@@ -82,72 +82,26 @@ export const shopAndCustomerApi = {
   },
 
   // Fetch recent statements across top customers using GET /api/v1/customers/{customer_id}/statement
-  getDashboardData: async () => {
-    const custRes = await shopAndCustomerApi.listCustomers({ status: "ACTIVE", limit: 100 });
-    const customers = custRes.items || [];
-
-    let totalOutstandingMinor = 0;
-    let overdueCustomersCount = 0;
-    let todaySalesMinor = 0;
-    let todayPaymentsMinor = 0;
-
-    customers.forEach((c) => {
-      const bal = c.balance_summary;
-      if (bal) {
-        totalOutstandingMinor += bal.outstanding_balance_minor || 0;
-        if ((bal.overdue_balance_minor || 0) > 0) {
-          overdueCustomersCount += 1;
-        }
-      }
-    });
-
-    // Fetch latest statement entries for the first few active customers to populate Recent Transactions
-    const recentTx: RecentTransactionItem[] = [];
-    const todayPrefix = new Date().toISOString().slice(0, 10);
-
-    const sampleCustomers = customers.slice(0, 5);
-    await Promise.all(
-      sampleCustomers.map(async (cust, idx) => {
-        try {
-          const stRes = await api.get(`/customers/${cust.customer_id}/statement`, {
-            params: { limit: 5 },
-          });
-          const entries = stRes.data?.items || [];
-          entries.forEach((e: any) => {
-            if (e.occurred_at?.startsWith(todayPrefix) && e.status === "POSTED") {
-              if (e.type === "CREDIT_SALE") todaySalesMinor += e.amount_minor || 0;
-              if (e.type === "PAYMENT") todayPaymentsMinor += e.amount_minor || 0;
-            }
-            recentTx.push({
-              entry_id: e.entry_id,
-              customer_id: cust.customer_id,
-              customer_name: cust.name,
-              customer_code: `NP-${String(idx + 1).padStart(3, "0")}`,
-              type: e.type,
-              amount_minor: e.amount_minor,
-              occurred_at: e.occurred_at,
-              note: e.note,
-            });
-          });
-        } catch {
-          // Ignore individual statement errors
-        }
-      })
-    );
-
-    recentTx.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
-
+// services/customerService.ts ඇතුළේ shopAndCustomerApi object එකේ getDashboardData වෙනුවට:
+  getDashboardData: async (): Promise<{
+    totalCustomers: number;
+    overdueCustomersCount: number;
+    todaySalesMinor: number;
+    todayPaymentsMinor: number;
+    totalOutstandingMinor: number;
+    recentTransactions: RecentTransactionItem[];
+  }> => {
+    // 1. Server-side aggregated endpoint එකෙන් කෙලින්ම නිවැරදි දත්ත ලබාගැනීම
+    const res = await api.get("/reports/dashboard");
     return {
-      customers,
-      totalCustomers: customers.length,
-      overdueCustomersCount,
-      totalOutstandingMinor,
-      todaySalesMinor,
-      todayPaymentsMinor,
-      recentTransactions: recentTx.slice(0, 5),
+      totalCustomers: res.data?.totalCustomers || 0,
+      overdueCustomersCount: res.data?.overdueCustomersCount || 0,
+      todaySalesMinor: res.data?.todaySalesMinor || 0,
+      todayPaymentsMinor: res.data?.todayPaymentsMinor || 0,
+      totalOutstandingMinor: res.data?.totalOutstandingMinor || 0,
+      recentTransactions: res.data?.recentTransactions || [],
     };
   },
-
 createCustomer: async (payload: {
     client_id?: string;
     name: string;

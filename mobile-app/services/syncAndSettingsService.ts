@@ -2,11 +2,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, getDeviceIdentity } from "./api";
 import { shopAndCustomerApi } from "./customerService";
 
-export interface PendingSyncRecord {
-  id: string;
+export interface OutboxMutation {
+  operation_id: string;
+  endpoint: string;
+  method: "POST" | "PATCH";
+  payload: any;
   title: string;
   rightLabel: string;
-  status: "WAITING" | "CONFLICT";
+  created_at: string;
+  status: "WAITING" | "CONFLICT" | "FAILED";
+  error_message?: string;
 }
 
 export interface SyncStatusOverview {
@@ -16,106 +21,115 @@ export interface SyncStatusOverview {
   needsAttentionCount: number;
   lastSyncFormatted: string;
   lastAttemptFormatted: string;
-  pendingRecords: PendingSyncRecord[];
+  pendingRecords: OutboxMutation[];
 }
 
-const SYNC_STATE_STORAGE_KEY = "nayapotha_sync_demo_state";
+const OUTBOX_KEY = "nayapotha_real_outbox_v1";
+const LAST_SYNC_KEY = "nayapotha_last_sync_ts_v1";
 
 export const syncAndSettingsApi = {
-  // 1. Sync Status සහ Pending Records ලබාගැනීම
-  getSyncOverview: async (): Promise<SyncStatusOverview> => {
-    let isOnline = true;
-    let totalCustomerAndTxRecords = 18;
-
-    try {
-      const custRes = await shopAndCustomerApi.listCustomers({
-        status: "ACTIVE",
-        limit: 100,
+  // Enqueue a mutation when offline
+  enqueueOutboxMutation: async (mutation: Omit<OutboxMutation, "created_at" | "status">) => {
+    const raw = await AsyncStorage.getItem(OUTBOX_KEY);
+    const list: OutboxMutation[] = raw ? JSON.parse(raw) : [];
+    // Prevent duplicate operation_id
+    if (!list.some((item) => item.operation_id === mutation.operation_id)) {
+      list.push({
+        ...mutation,
+        created_at: new Date().toISOString(),
+        status: "WAITING",
       });
-      const customers = custRes.items || [];
-      totalCustomerAndTxRecords = Math.max(12, customers.length * 3);
-    } catch {
-      isOnline = false;
+      await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(list));
     }
-
-    const savedStateStr = await AsyncStorage.getItem(SYNC_STATE_STORAGE_KEY);
-    const isCleared = savedStateStr === "SYNCED_CLEAN";
-
-    const now = new Date();
-    const datePart = now.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-    });
-    const timePart = now.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    if (isCleared) {
-      return {
-        isOnline,
-        syncedCount: totalCustomerAndTxRecords + 3,
-        pendingCount: 0,
-        needsAttentionCount: 0,
-        lastSyncFormatted: `${datePart} · ${timePart}`,
-        lastAttemptFormatted: `${datePart} ${now.getFullYear()} · ${timePart}`,
-        pendingRecords: [],
-      };
-    }
-
-    return {
-      isOnline,
-      syncedCount: totalCustomerAndTxRecords,
-      pendingCount: 2,
-      needsAttentionCount: 1,
-      lastSyncFormatted: `${datePart} · 08:30`,
-      lastAttemptFormatted: `${datePart} ${now.getFullYear()} · ${timePart}`,
-      pendingRecords: [
-        {
-          id: "CR-027",
-          title: "CR-027 · Nimal · NP-001",
-          rightLabel: "Rs.1,500 credit",
-          status: "WAITING",
-        },
-        {
-          id: "UPD-01",
-          title: "Customer profile update",
-          rightLabel: "1 update",
-          status: "WAITING",
-        },
-      ],
-    };
   },
 
-  // 2. Retry Sync (FastAPI /sync/push හෝ /sync/pull සමඟ සම්බන්ධ වී Pending records යැවීම)
-  retrySyncNow: async (): Promise<SyncStatusOverview> => {
-    const { device_id } = await getDeviceIdentity();
+  getOutboxQueue: async (): Promise<OutboxMutation[]> => {
+    const raw = await AsyncStorage.getItem(OUTBOX_KEY);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  getSyncOverview: async (): Promise<SyncStatusOverview> => {
+    let isOnline = true;
+    let syncedCount = 0;
+
     try {
-      // Try calling backend sync pull/push if endpoint is active
-      await api.get("/sync/pull", {
-        params: { device_id, limit: 50 },
-      });
+      const dash = await api.get("/reports/dashboard", { timeout: 5000 });
+      syncedCount =
+        (dash.data?.totalCustomers || 0) +
+        (dash.data?.recentTransactions?.length || 0);
     } catch {
-      // Even if endpoint is not mounted or offline, we verify customer list connectivity
       try {
-        await shopAndCustomerApi.listCustomers({ limit: 5 });
+        const custRes = await shopAndCustomerApi.listCustomers({ limit: 100 });
+        syncedCount = custRes.items?.length || 0;
       } catch {
-        // Still offline
-        return syncAndSettingsApi.getSyncOverview();
+        isOnline = false;
       }
     }
 
-    await AsyncStorage.setItem(SYNC_STATE_STORAGE_KEY, "SYNCED_CLEAN");
+    const queue = await syncAndSettingsApi.getOutboxQueue();
+    const pendingCount = queue.filter((q) => q.status === "WAITING").length;
+    const needsAttentionCount = queue.filter(
+      (q) => q.status === "CONFLICT" || q.status === "FAILED"
+    ).length;
+
+    const lastSyncIso = await AsyncStorage.getItem(LAST_SYNC_KEY);
+    const formatTs = (iso?: string | null) => {
+      const d = iso ? new Date(iso) : new Date();
+      return `${d.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+      })} · ${d.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
+    };
+
+    return {
+      isOnline,
+      syncedCount,
+      pendingCount,
+      needsAttentionCount,
+      lastSyncFormatted: formatTs(lastSyncIso),
+      lastAttemptFormatted: formatTs(new Date().toISOString()),
+      pendingRecords: queue,
+    };
+  },
+
+  // Replay every queued outbox operation against FastAPI using its original operation_id
+  retrySyncNow: async (): Promise<SyncStatusOverview> => {
+    const queue = await syncAndSettingsApi.getOutboxQueue();
+    const remaining: OutboxMutation[] = [];
+
+    for (const item of queue) {
+      try {
+        if (item.method === "POST") {
+          await api.post(item.endpoint, item.payload);
+        } else if (item.method === "PATCH") {
+          await api.patch(item.endpoint, item.payload);
+        }
+        // Succeeded -> omit from remaining
+      } catch (err: any) {
+        const status = err.response?.status;
+        if (status === 409) {
+          remaining.push({
+            ...item,
+            status: "CONFLICT",
+            error_message:
+              err.response?.data?.detail?.message || "Version conflict detected.",
+          });
+        } else {
+          remaining.push(item);
+        }
+      }
+    }
+
+    await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(remaining));
+    if (remaining.length === 0) {
+      await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    }
     return syncAndSettingsApi.getSyncOverview();
   },
 
-  // 3. Demo සඳහා නැවත Pending State එක පෙන්වීමට (අවශ්‍ය විට)
-  resetDemoPendingState: async (): Promise<SyncStatusOverview> => {
-    await AsyncStorage.removeItem(SYNC_STATE_STORAGE_KEY);
-    return syncAndSettingsApi.getSyncOverview();
-  },
-
-  // 4. Shop Profile යාවත්කාලීන කිරීම (PATCH /api/v1/shops/me)
   updateShopProfile: async (payload: {
     shop_name?: string;
     phone_number?: string;
@@ -123,27 +137,33 @@ export const syncAndSettingsApi = {
     expected_version?: number;
   }) => {
     const { device_id } = await getDeviceIdentity();
-    const res = await api.patch("/shops/me", {
-      ...payload,
-      device_id,
-    });
-    return res.data;
-  },
-
-  // 5. මුරපදය වෙනස් කිරීම
-  changePassword: async (currentPassword: string, newPassword: string) => {
+    const body = { ...payload, device_id };
     try {
-      const res = await api.post("/auth/change-password", {
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
+      const res = await api.patch("/shops/me", body);
       return res.data;
     } catch (err: any) {
-      // Backend endpoint එක තවම නොමැති නම් 404 දී සාර්ථකව ඉදිරියට යාමට ඉඩ දෙයි
-      if (err.response?.status === 404) {
-        return { status: "ok" };
+      if (!err.response) {
+        // Network offline -> queue in real outbox
+        await syncAndSettingsApi.enqueueOutboxMutation({
+          operation_id: `shop_upd_${Date.now()}`,
+          endpoint: "/shops/me",
+          method: "PATCH",
+          payload: body,
+          title: "Shop profile update",
+          rightLabel: "1 update",
+        });
+        return { queued_offline: true };
       }
       throw err;
     }
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    // Strictly requires 200 OK from POST /api/v1/auth/change-password (no 404 bypass)
+    const res = await api.post("/auth/change-password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    return res.data;
   },
 };

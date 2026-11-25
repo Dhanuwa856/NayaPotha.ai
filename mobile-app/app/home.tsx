@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,11 @@ import {
   getInitials,
   RecentTransactionItem,
 } from "../services/customerService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import InteractiveTourModal, {
+  APP_TOUR_STORAGE_KEY,
+} from "../components/ui/InteractiveTourModal";
+import { HelpCircle } from "lucide-react-native";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -44,6 +49,16 @@ export default function HomeScreen() {
   const [recentTransactions, setRecentTransactions] = useState<
     RecentTransactionItem[]
   >([]);
+
+  const [tourVisible, setTourVisible] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(APP_TOUR_STORAGE_KEY).then((done) => {
+      if (!done) {
+        setTourVisible(true);
+      }
+    });
+  }, []);
 
   // Time-based greeting
  const getGreeting = () => {
@@ -100,43 +115,49 @@ export default function HomeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Top App Bar */}
-      <View className="h-20 px-5 flex-row items-center justify-between border-b border-slate-100">
-        <View className="flex-row items-center gap-2.5">
-          {/* IMAGE PLACEHOLDER: Replace with your app logo */}
-          <Image
-            source={require("../assets/images/logo.png")}
-            className="w-12 h-12 rounded-xl"
-          />
-          <Text className="text-2xl font-inter-bold text-brand-navy tracking-tight">
-            NayaPotha<Text className="text-brand-orange">.ai</Text>
-          </Text>
-        </View>
-
-        <View className="flex-row items-center gap-3">
-          {/* Live Sync Status Pill */}
-          <View className="px-3 py-1.5 bg-brand-surface rounded-xl border border-brand-border flex-row items-center gap-2">
-            <View
-              className={`w-2.5 h-2.5 rounded-full ${
-                isSyncing ? "bg-brand-orange" : "bg-brand-success"
-              }`}
+      <View className="px-5 py-3 border-b border-slate-100">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 flex-row items-center gap-2.5 min-w-0">
+            {/* IMAGE PLACEHOLDER: Replace with your app logo */}
+            <Image
+              source={require("../assets/images/logo.png")}
+              className="w-12 h-12 rounded-xl flex-shrink-0"
             />
-            <Text className="text-brand-navy text-xs font-inter-semibold">
-              {isSyncing ? t.syncing : t.synced}
+            <Text
+              numberOfLines={1}
+              className="flex-shrink text-2xl font-inter-bold text-brand-navy tracking-tight"
+            >
+              NayaPotha<Text className="text-brand-orange">.ai</Text>
             </Text>
           </View>
 
-          {/* Notification Bell Button */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => router.push("/notifications" as any)}
-            className="w-11 h-11 bg-brand-surface rounded-2xl items-center justify-center relative"
-          >
-            <Bell size={22} color="#102F50" strokeWidth={2.2} />
-            {overdueCount > 0 && (
-              <View className="w-2.5 h-2.5 bg-brand-orange rounded-full absolute top-2.5 right-2.5 border border-white" />
-            )}
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2 ml-3">
+            {/* Live Sync Status Pill */}
+            <View className="px-2.5 py-1.5 bg-brand-surface rounded-xl border border-brand-border flex-row items-center gap-2">
+              <View
+                className={`w-2.5 h-2.5 rounded-full ${
+                  isSyncing ? "bg-brand-orange" : "bg-brand-success"
+                }`}
+              />
+              <Text className="text-brand-navy text-xs font-inter-semibold">
+                {isSyncing ? t.syncing : t.synced}
+              </Text>
+            </View>
+
+            {/* Notification Bell Button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push("/notifications" as any)}
+              className="w-11 h-11 bg-brand-surface rounded-2xl items-center justify-center relative"
+            >
+              <Bell size={22} color="#102F50" strokeWidth={2.2} />
+              {overdueCount > 0 && (
+                <View className="w-2.5 h-2.5 bg-brand-orange rounded-full absolute top-2.5 right-2.5 border border-white" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
+
       </View>
 
       {/* Main Scrollable Content */}
@@ -342,26 +363,27 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              recentTransactions.map((tx) => {
-                const isPayment = tx.type === "PAYMENT";
-                const isReversal = tx.type === "REVERSAL";
-                return (
-                  <TouchableOpacity
-                    key={tx.entry_id}
-                    activeOpacity={0.85}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/ledger/entry/[id]",
-                        params: {
-                          id: tx.entry_id,
-                          customer_id: tx.customer_id,
-                          customer_name: tx.customer_name,
-                          code: tx.customer_code,
-                        },
-                      } as any)
-                    }
-                    className="p-3.5 bg-brand-surface rounded-xl flex-row items-center gap-3"
-                  >
+              recentTransactions.map((tx, index: number) => {
+              const isPayment = tx.type === "PAYMENT";
+              const isReversal = tx.type === "REVERSAL";
+              return (
+                <TouchableOpacity
+                  // entry_id එක null නම් index එක key එක ලෙස භාවිතා කරයි
+                  key={tx.entry_id || `tx-${index}`} 
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/ledger/entry/[id]",
+                      params: {
+                        id: tx.entry_id,
+                        customer_id: tx.customer_id,
+                        customer_name: tx.customer_name,
+                        code: tx.customer_code,
+                      },
+                    } as any)
+                  }
+                  className="p-3.5 bg-brand-surface rounded-xl flex-row items-center gap-3"
+                >
                     <View className="w-10 h-10 bg-white rounded-2xl border border-brand-border items-center justify-center">
                       <Text className="text-brand-navy text-xs font-inter-bold">
                         {getInitials(tx.customer_name)}
@@ -407,6 +429,10 @@ export default function HomeScreen() {
 
       {/* Floating Glass Bottom Navigation Bar */}
       <BottomNav active="Home" />
+      <InteractiveTourModal
+        visible={tourVisible}
+        onClose={() => setTourVisible(false)}
+      />
     </SafeAreaView>
   );
 }

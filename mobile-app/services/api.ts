@@ -4,7 +4,7 @@ import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ⚠️ Replace with your computer's local Wi-Fi IPv4 address
-export const API_BASE_URL = "http://192.168.8.189:8000/api/v1";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:8000/api/v1";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -56,6 +56,7 @@ api.interceptors.response.use(
         const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
         if (!refreshToken) throw new Error("No refresh token");
         const { device_id } = await getDeviceIdentity();
+        console.log("Device ID:", device_id);
         const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
           refresh_token: refreshToken,
           device_id,

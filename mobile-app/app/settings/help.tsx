@@ -6,6 +6,8 @@ import { ArrowLeft, ChevronRight } from "lucide-react-native";
 import { useLanguage } from "../../context/LanguageContext";
 import { useAuth } from "../../context/AuthContext";
 import BottomNav from "../../components/ui/BottomNav";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { APP_TOUR_STORAGE_KEY } from "../../components/ui/InteractiveTourModal";
 
 export default function HelpAboutScreen() {
   const router = useRouter();
@@ -75,6 +77,24 @@ export default function HelpAboutScreen() {
         className="flex-1 px-5 py-4"
         contentContainerStyle={{ paddingBottom: 120 }}
       >
+        <TouchableOpacity
+  activeOpacity={0.85}
+  onPress={async () => {
+    await AsyncStorage.removeItem(APP_TOUR_STORAGE_KEY);
+    router.replace("/home" as any);
+  }}
+  className="p-4 mb-4 bg-amber-50 rounded-2xl border border-brand-orange flex-row items-center justify-between"
+>
+  <View className="flex-1 pr-3">
+    <Text className="text-brand-navy text-base font-inter-bold">
+      Start Interactive App Tour
+    </Text>
+    <Text className="text-brand-textSecondary text-xs font-inter mt-0.5">
+      Step-by-step walkthrough of Credit, Voice AI, Reports & Sync
+    </Text>
+  </View>
+  <ChevronRight size={20} color="#102F50" />
+</TouchableOpacity>
         {/* Interactive Help Topics */}
         <View className="divide-y divide-slate-100 mb-5">
           {helpItems.map((item, idx) => (

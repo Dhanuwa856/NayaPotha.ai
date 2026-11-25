@@ -5,13 +5,13 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { User, Lock, Eye, EyeOff, AlertCircle } from "lucide-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 

@@ -2,12 +2,14 @@ import { api } from "./api";
 import { shopAndCustomerApi, CustomerItem } from "./customerService";
 
 export interface ParsedVoiceDraft {
+  draftId?: string;
   transcript: string;
   language: "si" | "en";
   intent: "CREDIT_SALE" | "PAYMENT";
   extractedCustomerQuery: string;
-  amountMinor: number;
+  amountMinor: number; // 0 if no amount was spoken (never defaults to Rs. 2,000)
   matchingCustomers: CustomerItem[];
+  allCustomers: CustomerItem[];
   isExactMatch: boolean;
 }
 
@@ -23,44 +25,52 @@ export interface RiskEstimateDetail {
   reasons: string[];
 }
 
-// සිංහල වචන වලින් කියන මුදල් අගයන් ඉලක්කම් බවට හැරවීමේ උපකාරකය
-const SINHALA_NUMBER_WORDS: Record<string, number> = {
-  සීය: 100,
-  සියය: 100,
-  දෙසීය: 200,
-  තුන්සීය: 300,
-  හතරසීය: 400,
-  පන්සීය: 500,
-  පන්සිය: 500,
-  දාහ: 1000,
-  දහස: 1000,
-  එක්දහස්: 1000,
-  දෙදාහ: 2000,
-  දෙදහස: 2000,
-  තුන්දාහ: 3000,
-  හතරදාහ: 4000,
-  පන්දාහ: 5000,
-  දසදහස: 10000,
-};
-
-function extractAmountFromText(text: string): number {
-  // 1. ඉලක්කම් තිබේදැයි බැලීම (උදා: "2,000", "2000", "1500.50")
+// Comprehensive Sinhala compound number parser
+function parseSinhalaNaturalAmount(text: string): number {
   const cleaned = text.replace(/,/g, "");
-  const regex = /(?:රු\.?|රුපියල්|rs\.?|lkr)?\s*(\d+(?:\.\d{1,2})?)/i;
-  const match = cleaned.match(regex);
-  if (match && match[1]) {
-    const val = parseFloat(match[1]);
+  const digitMatch = cleaned.match(/(?:රු\.?|රුපියල්|rs\.?|lkr)?\s*(\d+(?:\.\d{1,2})?)/i);
+  if (digitMatch && digitMatch[1]) {
+    const val = parseFloat(digitMatch[1]);
     if (val > 0) return Math.round(val * 100);
   }
 
-  // 2. සිංහල වචන වලින් ගණන කියා ඇත්නම් (උදා: "දෙදාහක")
-  for (const [word, amount] of Object.entries(SINHALA_NUMBER_WORDS)) {
-    if (text.includes(word)) {
-      return amount * 100;
-    }
-  }
+  let total = 0;
+  const lower = text.toLowerCase();
 
-  return 0;
+  // Thousands
+  if (lower.includes("දසදහ") || lower.includes("දහදාහ")) total += 10000;
+  else if (lower.includes("නවදහ") || lower.includes("නවදාහ")) total += 9000;
+  else if (lower.includes("අටදහ") || lower.includes("අටදාහ")) total += 8000;
+  else if (lower.includes("හත්දහ") || lower.includes("හත්දාහ")) total += 7000;
+  else if (lower.includes("හයදහ") || lower.includes("හයදාහ")) total += 6000;
+  else if (lower.includes("පන්දහ") || lower.includes("පන්දාහ")) total += 5000;
+  else if (lower.includes("හතරදහ") || lower.includes("හතරදාහ")) total += 4000;
+  else if (lower.includes("තුන්දහ") || lower.includes("තුන්දාහ")) total += 3000;
+  else if (lower.includes("දෙදහ") || lower.includes("දෙදාහ")) total += 2000;
+  else if (lower.includes("එක්දහස්") || lower.includes("දාහ") || lower.includes("දහස")) total += 1000;
+
+  // Hundreds
+  if (lower.includes("නවසීය") || lower.includes("නවසිය")) total += 900;
+  else if (lower.includes("අටසීය") || lower.includes("අටසිය")) total += 800;
+  else if (lower.includes("හත්සීය") || lower.includes("හත්සිය")) total += 700;
+  else if (lower.includes("හයසීය") || lower.includes("හයසිය")) total += 600;
+  else if (lower.includes("පන්සීය") || lower.includes("පන්සිය")) total += 500;
+  else if (lower.includes("හතරසීය") || lower.includes("හතරසිය")) total += 400;
+  else if (lower.includes("තුන්සීය") || lower.includes("තුන්සිය")) total += 300;
+  else if (lower.includes("දෙසීය") || lower.includes("දෙසිය")) total += 200;
+  else if (lower.includes("සීය") || lower.includes("සියය")) total += 100;
+
+  // Tens
+  if (lower.includes("අනූ")) total += 90;
+  else if (lower.includes("අසූ")) total += 80;
+  else if (lower.includes("හැත්තෑ")) total += 70;
+  else if (lower.includes("හැට")) total += 60;
+  else if (lower.includes("පනහ") || lower.includes("පනස්")) total += 50;
+  else if (lower.includes("හතළිහ")) total += 40;
+  else if (lower.includes("තිහ")) total += 30;
+  else if (lower.includes("විස්ස")) total += 20;
+
+  return total * 100; // Return 0 if nothing matched
 }
 
 function extractIntentFromText(text: string): "CREDIT_SALE" | "PAYMENT" {
@@ -77,13 +87,11 @@ function extractIntentFromText(text: string): "CREDIT_SALE" | "PAYMENT" {
     "received",
     "pay",
   ];
-  for (const kw of paymentKeywords) {
-    if (lower.includes(kw)) return "PAYMENT";
-  }
-  return "CREDIT_SALE";
+  return paymentKeywords.some((kw) => lower.includes(kw))
+    ? "PAYMENT"
+    : "CREDIT_SALE";
 }
 
-// සිංහල විභක්ති ප්‍රත්‍ය (-ට, -ගෙන්, -ගේ) ඉවත් කර පාරිභෝගික නම සෙවීම
 function normalizeSinhalaNameToken(token: string): string {
   return token
     .replace(/(ගෙන්|ගේ|ට|ගෙ|ව|ත්)$/u, "")
@@ -93,171 +101,113 @@ function normalizeSinhalaNameToken(token: string): string {
 }
 
 export const voiceAndRiskApi = {
-  // 1. Audio File එක Backend එකට යවා Text කරගැනීම
   uploadAudioForTranscription: async (
     audioUri: string,
     language: "si" | "en"
-  ): Promise<string | null> => {
-    try {
-      const formData = new FormData();
-      formData.append("file", {
-        uri: audioUri,
-        type: "audio/m4a",
-        name: `voice_${Date.now()}.m4a`,
-      } as any);
-      formData.append("language", language);
+  ): Promise<{
+    draft_id?: string;
+    transcript: string;
+    intent?: "CREDIT_SALE" | "PAYMENT";
+    customer_query?: string;
+    amount_minor?: number;
+  } | null> => {
+    const formData = new FormData();
+    formData.append("file", {
+      uri: audioUri,
+      type: "audio/m4a",
+      name: `voice_${Date.now()}.m4a`,
+    } as any);
+    formData.append("language", language);
 
-      const res = await api.post("/voice/transcribe", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 12000,
-      });
-
-      if (res.data?.transcript && res.data.transcript.trim().length > 0) {
-        return res.data.transcript.trim();
-      }
-      return null;
-    } catch {
-      // Backend voice endpoint එක නොමැති නම් හෝ Offline නම් null එවයි
-      return null;
-    }
+    const res = await api.post("/voice/transcribe", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 15000,
+    });
+    return res.data;
   },
 
-  // 2. Voice වාක්‍යය විශ්ලේෂණය කර දත්ත සහ ගැළපෙන පාරිභෝගිකයින් සෙවීම
   parseVoiceCommand: async (
     transcript: string,
-    language: "si" | "en"
+    language: "si" | "en",
+    serverHint?: {
+      draft_id?: string;
+      intent?: "CREDIT_SALE" | "PAYMENT";
+      customer_query?: string;
+      amount_minor?: number;
+    }
   ): Promise<ParsedVoiceDraft> => {
     const cleanText = transcript.trim();
-    const amountMinor = extractAmountFromText(cleanText);
-    const intent = extractIntentFromText(cleanText);
+    const amountMinor =
+      serverHint?.amount_minor && serverHint.amount_minor > 0
+        ? serverHint.amount_minor
+        : parseSinhalaNaturalAmount(cleanText);
+    const intent = serverHint?.intent || extractIntentFromText(cleanText);
 
-    // සියලුම සක්‍රීය පාරිභෝගිකයින් Database එකෙන් ලබාගැනීම
     const custRes = await shopAndCustomerApi.listCustomers({
       status: "ACTIVE",
       limit: 100,
     });
     const allCustomers = custRes.items || [];
 
-    // වාක්‍යයේ වචන වෙන් කරගෙන පාරිභෝගික නම් සමඟ සැසඳීම
+    const stopWords = new Set([
+      "රු",
+      "රුපියල්",
+      "ණයක්",
+      "ණය",
+      "සටහන්",
+      "කරන්න",
+      "දාන්න",
+      "ගෙව්වා",
+      "ලැබුණා",
+      "record",
+      "credit",
+      "payment",
+      "for",
+      "from",
+      "rs",
+      "lkr",
+    ]);
+
     const rawWords = cleanText.split(/\s+/);
     const normalizedTokens = rawWords
       .map(normalizeSinhalaNameToken)
-      .filter((w) => w.length >= 2);
+      .filter((w) => w.length >= 2 && !stopWords.has(w) && !/^\d+$/.test(w));
+
+    if (serverHint?.customer_query) {
+      normalizedTokens.unshift(
+        normalizeSinhalaNameToken(serverHint.customer_query)
+      );
+    }
 
     const matchedCustomers = allCustomers.filter((c) => {
       const custNameLower = c.name.trim().toLowerCase();
       const custParts = custNameLower.split(/\s+/);
       const nickLower = (c.nickname || "").trim().toLowerCase();
 
-      // සම්පූර්ණ නම හෝ මුල් නම වාක්‍යයේ තිබේදැයි බැලීම
-      if (cleanText.toLowerCase().includes(custParts[0])) return true;
-      if (nickLower && cleanText.toLowerCase().includes(nickLower)) return true;
-
-      // විභක්ති ඉවත් කළ වචන ("පාලිතට" -> "පාලිත") සමඟ සැසඳීම
       return normalizedTokens.some(
         (tok) =>
-          custParts.some((part) => part.includes(tok) || tok.includes(part)) ||
-          (nickLower && (nickLower.includes(tok) || tok.includes(nickLower)))
+          custParts.some((part) => part === tok || part.startsWith(tok)) ||
+          (nickLower && (nickLower === tok || nickLower.startsWith(tok)))
       );
     });
 
-    const hasDirectMatch = matchedCustomers.length > 0;
-    const finalMatches = hasDirectMatch ? matchedCustomers : allCustomers;
-
     return {
+      draftId: serverHint?.draft_id,
       transcript: cleanText,
       language,
       intent,
-      extractedCustomerQuery: hasDirectMatch ? matchedCustomers[0].name : "",
-      amountMinor: amountMinor > 0 ? amountMinor : 200000,
-      matchingCustomers: finalMatches,
-      isExactMatch: hasDirectMatch,
+      extractedCustomerQuery: matchedCustomers[0]?.name || serverHint?.customer_query || "",
+      amountMinor, // Strictly 0 if no amount was found
+      matchingCustomers: matchedCustomers, // Empty array if none matched!
+      allCustomers,
+      isExactMatch: matchedCustomers.length === 1,
     };
   },
 
-  // 3. AI Risk Estimate විස්තර ලබාගැනීම
   getCustomerRiskDetail: async (
     customerId: string
   ): Promise<RiskEstimateDetail> => {
-    const cust = await shopAndCustomerApi.getCustomer(customerId);
-    const outMinor = cust.balance_summary?.outstanding_balance_minor || 0;
-    const overdueMinor = cust.balance_summary?.overdue_balance_minor || 0;
-    const limitMinor = cust.credit_limit_minor || null;
-
-    const usagePercent =
-      limitMinor && limitMinor > 0
-        ? Math.min(100, (outMinor / limitMinor) * 100)
-        : 0;
-
-    let recentPaymentMinor = 0;
-    let recentPaymentDate: string | null = null;
-    let overdueDays = 0;
-
-    try {
-      const stRes = await api.get(`/customers/${customerId}/statement`, {
-        params: { limit: 20 },
-      });
-      const items = stRes.data?.items || [];
-      const latestPay = items.find(
-        (i: any) => i.type === "PAYMENT" && i.status === "POSTED"
-      );
-      if (latestPay) {
-        recentPaymentMinor = latestPay.amount_minor || 0;
-        recentPaymentDate = latestPay.occurred_at;
-      }
-
-      const oldestOverdue = items.find(
-        (i: any) =>
-          i.type === "CREDIT_SALE" &&
-          i.status === "POSTED" &&
-          (i.remaining_unpaid_minor || 0) > 0 &&
-          i.due_date &&
-          new Date(i.due_date) < new Date()
-      );
-      if (oldestOverdue?.due_date) {
-        const diffMs =
-          new Date().getTime() - new Date(oldestOverdue.due_date).getTime();
-        overdueDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-      } else if (overdueMinor > 0) {
-        overdueDays = 7;
-      }
-    } catch {
-      // Ignore statement error
-    }
-
-    let category: RiskEstimateDetail["category"] = "LOW";
-    let reasons: string[] = [];
-    try {
-      const riskRes = await api.get(`/risk/customers/${customerId}/latest`);
-      if (riskRes.data?.category) {
-        category = riskRes.data.category;
-        reasons = riskRes.data.reasons || [];
-      }
-    } catch {
-      if (overdueMinor > 0 && usagePercent >= 85) {
-        category = "HIGH";
-      } else if (overdueMinor > 0 || usagePercent >= 60) {
-        category = "MEDIUM";
-      } else if (
-        (cust.balance_summary?.total_credit_minor || 0) === 0 &&
-        (cust.balance_summary?.total_paid_minor || 0) === 0
-      ) {
-        category = "INSUFFICIENT_HISTORY";
-      } else {
-        category = "LOW";
-      }
-    }
-
-    return {
-      customer_id: customerId,
-      category,
-      overdue_days: overdueDays,
-      overdue_balance_minor: overdueMinor,
-      recent_payment_minor: recentPaymentMinor,
-      recent_payment_date: recentPaymentDate,
-      limit_usage_percent: usagePercent,
-      credit_limit_minor: limitMinor,
-      reasons,
-    };
+    const res = await api.get(`/risk/customers/${customerId}/latest`);
+    return res.data;
   },
 };
